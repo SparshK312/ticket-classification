@@ -124,13 +124,16 @@ class Level1BusinessClassifier:
         self.logger.info("Initializing category representations...")
         
         # DEPLOYMENT OPTIMIZATION: Try to load pre-computed embeddings first
+        print("🔧 DEBUG: Attempting to load pre-computed embeddings...")
         precomputed_centroids = self._load_precomputed_business_embeddings()
         if precomputed_centroids:
             self.category_centroids = precomputed_centroids
+            print(f"✅ DEBUG: Loaded pre-computed business embeddings for {len(precomputed_centroids)} categories")
             self.logger.info(f"✅ Loaded pre-computed business embeddings for {len(precomputed_centroids)} categories")
             return
         
         # FALLBACK: Original computation path (preserves existing functionality)
+        print("❌ DEBUG: Pre-computed embeddings not found, using original computation...")
         self.logger.info("Pre-computed embeddings not found, using original computation...")
         
         # 1) Keyword/description-based representatives
@@ -148,38 +151,48 @@ class Level1BusinessClassifier:
 
         # 2) Dataset-derived representatives (if data present)
         dataset_centroids: Dict[str, np.ndarray] = {}
-        data_path = Path('data/processed/consolidated_tickets.csv')
-        if pd is not None and data_path.exists():
-            try:
-                df = pd.read_csv(data_path, usecols=['Category', 'Short description'])
-                df = df.dropna(subset=['Short description'])
-                # Map raw to business
-                mapped = map_raw_categories(df['Category'].tolist())
-                df = df.assign(BusinessCategory=mapped)
-                # Filter invalid
-                df = df.dropna(subset=['BusinessCategory'])
-                # Limit per category to reduce bias and speed
-                per_category_limit = 500
-                category_to_texts: Dict[str, List[str]] = {}
-                for cat_name in self.category_names:
-                    # cat_name is BusinessCategory enum value string
-                    # Our definitions use definition.name which matches these strings
-                    sample = df[df['BusinessCategory'] == cat_name]['Short description'].astype(str).head(per_category_limit).tolist()
-                    if sample:
-                        category_to_texts[cat_name] = sample
+        
+        # DEPLOYMENT OPTIMIZATION: Try to load pre-computed dataset centroids first
+        precomputed_dataset_centroids = self._load_precomputed_dataset_centroids()
+        if precomputed_dataset_centroids:
+            dataset_centroids = precomputed_dataset_centroids
+            print(f"✅ DEBUG: Loaded pre-computed dataset centroids for {len(dataset_centroids)} categories")
+            self.logger.info(f"Loaded pre-computed dataset centroids for {len(dataset_centroids)} categories")
+        else:
+            # FALLBACK: Original dataset centroid computation
+            print("🔧 DEBUG: Computing dataset centroids from historical data...")
+            data_path = Path('data/processed/consolidated_tickets.csv')
+            if pd is not None and data_path.exists():
+                try:
+                    df = pd.read_csv(data_path, usecols=['Category', 'Short description'])
+                    df = df.dropna(subset=['Short description'])
+                    # Map raw to business
+                    mapped = map_raw_categories(df['Category'].tolist())
+                    df = df.assign(BusinessCategory=mapped)
+                    # Filter invalid
+                    df = df.dropna(subset=['BusinessCategory'])
+                    # Limit per category to reduce bias and speed
+                    per_category_limit = 500
+                    category_to_texts: Dict[str, List[str]] = {}
+                    for cat_name in self.category_names:
+                        # cat_name is BusinessCategory enum value string
+                        # Our definitions use definition.name which matches these strings
+                        sample = df[df['BusinessCategory'] == cat_name]['Short description'].astype(str).head(per_category_limit).tolist()
+                        if sample:
+                            category_to_texts[cat_name] = sample
 
-                # Create centroids from dataset texts
-                for cat_name, texts in category_to_texts.items():
-                    if not texts:
-                        continue
-                    embeddings = self.embedding_engine.embed_batch(texts[:per_category_limit])
-                    if embeddings.size == 0:
-                        continue
-                    centroid = np.mean(embeddings, axis=0)
-                    dataset_centroids[cat_name] = centroid / (np.linalg.norm(centroid) + 1e-12)
-                self.logger.info(f"Dataset-derived centroids created for {len(dataset_centroids)} categories")
-            except Exception as e:
-                self.logger.warning(f"Failed to build dataset-derived centroids: {e}")
+                    # Create centroids from dataset texts
+                    for cat_name, texts in category_to_texts.items():
+                        if not texts:
+                            continue
+                        embeddings = self.embedding_engine.embed_batch(texts[:per_category_limit])
+                        if embeddings.size == 0:
+                            continue
+                        centroid = np.mean(embeddings, axis=0)
+                        dataset_centroids[cat_name] = centroid / (np.linalg.norm(centroid) + 1e-12)
+                    self.logger.info(f"Dataset-derived centroids created for {len(dataset_centroids)} categories")
+                except Exception as e:
+                    self.logger.warning(f"Failed to build dataset-derived centroids: {e}")
 
         # 3) Blend centroids when both available
         blended_centroids: Dict[str, np.ndarray] = {}
@@ -202,6 +215,14 @@ class Level1BusinessClassifier:
     def _initialize_discriminative_head(self):
         """Train a light discriminative head on top of embeddings if data is available."""
         try:
+            # DEPLOYMENT OPTIMIZATION: Try to load pre-computed discriminative head first
+            precomputed_head = self._load_precomputed_discriminative_head()
+            if precomputed_head:
+                self.discriminative_head = precomputed_head
+                self.logger.info("Loaded pre-computed discriminative head")
+                return
+            
+            # FALLBACK: Original discriminative head training (preserves existing functionality)
             head = DiscriminativeHead(
                 embedding_fn=lambda texts: self.embedding_engine.embed_batch(texts),
                 category_names=self.category_names,
@@ -520,6 +541,25 @@ class Level1BusinessClassifier:
         Uses a held-out random validation subset to select weights that maximize
         accuracy. Keeps search small to maintain startup performance.
         """
+        # DEPLOYMENT OPTIMIZATION: Try to load pre-computed parameter tuning first
+        precomputed_params = self._load_precomputed_parameter_tuning()
+        if precomputed_params:
+            self.weight_keyword = precomputed_params.get('weight_keyword', self.weight_keyword)
+            self.weight_priority = precomputed_params.get('weight_priority', self.weight_priority)
+            self.weight_exclusion = precomputed_params.get('weight_exclusion', self.weight_exclusion)
+            self.general_support_penalty = precomputed_params.get('general_support_penalty', self.general_support_penalty)
+            self.non_general_margin = precomputed_params.get('non_general_margin', self.non_general_margin)
+            
+            # Also load blend weights if available
+            blend_weights = precomputed_params.get('blend_weights', {})
+            if blend_weights:
+                self.weight_disc = blend_weights.get('weight_disc', self.weight_disc)
+                self.weight_cos = blend_weights.get('weight_cos', self.weight_cos)
+            
+            self.logger.info("Loaded pre-computed parameter tuning results")
+            return
+        
+        # FALLBACK: Original parameter tuning (preserves existing functionality)
         if pd is None:
             return
         data_path = Path('data/processed/consolidated_tickets.csv')
@@ -824,6 +864,118 @@ class Level1BusinessClassifier:
         
         return explanation
     
+    def _load_precomputed_discriminative_head(self) -> Optional[DiscriminativeHead]:
+        """
+        Load pre-computed discriminative head to avoid live training.
+        
+        Returns:
+            Trained DiscriminativeHead object, or None if not available
+        """
+        try:
+            # Look for pre-computed discriminative head in deployment asset locations
+            possible_locations = [
+                Path.cwd() / 'deployment' / 'assets' / 'embeddings',  # Development
+                Path.cwd() / 'assets' / 'embeddings',  # Deployment
+                Path(__file__).parent.parent.parent.parent / 'deployment' / 'assets' / 'embeddings',  # Relative to src
+            ]
+            
+            for embeddings_dir in possible_locations:
+                head_file = embeddings_dir / 'discriminative_head.pkl'
+                
+                if head_file.exists():
+                    import pickle
+                    with open(head_file, 'rb') as f:
+                        head = pickle.load(f)
+                    
+                    # Verify it's a valid discriminative head
+                    if hasattr(head, 'predict_single') and hasattr(head, 'is_trained'):
+                        self.logger.info(f"Loaded pre-computed discriminative head from {head_file}")
+                        return head
+            
+            return None
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to load pre-computed discriminative head: {e}")
+            return None
+
+    def _load_precomputed_parameter_tuning(self) -> Optional[Dict[str, Any]]:
+        """
+        Load pre-computed parameter tuning results to avoid live tuning.
+        
+        Returns:
+            Dictionary with tuned parameters, or None if not available
+        """
+        try:
+            # Look for pre-computed parameter tuning in deployment asset locations
+            possible_locations = [
+                Path.cwd() / 'deployment' / 'assets' / 'embeddings',  # Development
+                Path.cwd() / 'assets' / 'embeddings',  # Deployment
+                Path(__file__).parent.parent.parent.parent / 'deployment' / 'assets' / 'embeddings',  # Relative to src
+            ]
+            
+            for embeddings_dir in possible_locations:
+                tuning_file = embeddings_dir / 'parameter_tuning.json'
+                
+                if tuning_file.exists():
+                    with open(tuning_file, 'r') as f:
+                        tuning_results = json.load(f)
+                    
+                    self.logger.info(f"Loaded pre-computed parameter tuning from {tuning_file}")
+                    return tuning_results
+            
+            return None
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to load pre-computed parameter tuning: {e}")
+            return None
+    
+    def _load_precomputed_dataset_centroids(self) -> Optional[Dict[str, np.ndarray]]:
+        """
+        Load pre-computed dataset centroids to avoid live computation.
+        
+        Returns:
+            Dictionary mapping category names to centroids, or None if not available
+        """
+        try:
+            # Look for pre-computed dataset centroids in deployment asset locations
+            possible_locations = [
+                Path.cwd() / 'deployment' / 'assets' / 'embeddings',  # Development
+                Path.cwd() / 'assets' / 'embeddings',  # Deployment
+                Path(__file__).parent.parent.parent.parent / 'deployment' / 'assets' / 'embeddings',  # Relative to src
+            ]
+            
+            for embeddings_dir in possible_locations:
+                centroids_file = embeddings_dir / 'dataset_centroids.npy'
+                metadata_file = embeddings_dir / 'dataset_metadata.json'
+                
+                if centroids_file.exists() and metadata_file.exists():
+                    # Load centroids and metadata
+                    centroids_array = np.load(centroids_file)
+                    
+                    with open(metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                    
+                    # Verify metadata integrity
+                    centroid_names = metadata.get('centroid_names', [])
+                    
+                    if len(centroid_names) != centroids_array.shape[0]:
+                        self.logger.warning(f"Dataset centroid count mismatch in {centroids_file}")
+                        continue
+                    
+                    # Create dataset centroids dictionary
+                    dataset_centroids = {}
+                    for i, category_name in enumerate(centroid_names):
+                        dataset_centroids[category_name] = centroids_array[i]
+                    
+                    self.logger.info(f"Loaded pre-computed dataset centroids from {centroids_file}")
+                    return dataset_centroids
+            
+            return None
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to load pre-computed dataset centroids: {e}")
+            return None
+
     def _load_precomputed_business_embeddings(self) -> Optional[Dict[str, np.ndarray]]:
         """
         Load pre-computed business category embeddings for deployment optimization.
@@ -832,6 +984,8 @@ class Level1BusinessClassifier:
             Dictionary mapping category names to embeddings, or None if not available
         """
         try:
+            print(f"🔧 DEBUG: Current working directory: {Path.cwd()}")
+            
             # Look for pre-computed embeddings in deployment asset locations
             possible_locations = [
                 Path.cwd() / 'deployment' / 'assets' / 'embeddings',  # Development
@@ -839,20 +993,29 @@ class Level1BusinessClassifier:
                 Path(__file__).parent.parent.parent.parent / 'deployment' / 'assets' / 'embeddings',  # Relative to src
             ]
             
-            for embeddings_dir in possible_locations:
+            for i, embeddings_dir in enumerate(possible_locations):
                 embeddings_file = embeddings_dir / 'business_categories.npy'
                 metadata_file = embeddings_dir / 'business_metadata.json'
                 
+                print(f"🔧 DEBUG: Checking location {i+1}: {embeddings_dir}")
+                print(f"🔧 DEBUG: NPY exists: {embeddings_file.exists()}, JSON exists: {metadata_file.exists()}")
+                
                 if embeddings_file.exists() and metadata_file.exists():
+                    print(f"✅ DEBUG: Found assets at {embeddings_dir}")
+                    
                     # Load embeddings and metadata
                     embeddings_array = np.load(embeddings_file)
+                    print(f"🔧 DEBUG: Loaded embeddings shape: {embeddings_array.shape}")
                     
                     with open(metadata_file, 'r') as f:
                         metadata = json.load(f)
                     
                     # Verify metadata integrity
                     business_names = metadata.get('business_names', [])
+                    print(f"🔧 DEBUG: Business names count: {len(business_names)}")
+                    
                     if len(business_names) != embeddings_array.shape[0]:
+                        print(f"❌ DEBUG: Embedding count mismatch: {len(business_names)} names vs {embeddings_array.shape[0]} embeddings")
                         self.logger.warning(f"Embedding count mismatch in {embeddings_file}")
                         continue
                     
@@ -861,11 +1024,16 @@ class Level1BusinessClassifier:
                     for i, category_name in enumerate(business_names):
                         category_centroids[category_name] = embeddings_array[i]
                     
+                    print(f"✅ DEBUG: Successfully created centroids for {len(category_centroids)} categories")
                     self.logger.info(f"Loaded pre-computed embeddings from {embeddings_file}")
                     return category_centroids
             
+            print("❌ DEBUG: No valid embeddings found in any location")
             return None
             
         except Exception as e:
+            print(f"❌ DEBUG: Exception in loading: {e}")
+            import traceback
+            traceback.print_exc()
             self.logger.warning(f"Failed to load pre-computed embeddings: {e}")
             return None
