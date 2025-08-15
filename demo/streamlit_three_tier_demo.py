@@ -2,6 +2,7 @@
 """
 Three-Tier Ticket Classification Demo - Enhanced Streamlit App
 Production-ready demonstration using our advanced three-tier system
+Cache-busting version: v1.1 - Deployment optimization enabled
 """
 
 import streamlit as st
