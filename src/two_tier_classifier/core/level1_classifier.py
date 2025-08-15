@@ -137,18 +137,15 @@ class Level1BusinessClassifier:
         self.logger.info("Initializing category representations...")
         
         # DEPLOYMENT OPTIMIZATION: Try to load pre-computed embeddings first
-        print("🔧 DEBUG: Attempting to load pre-computed embeddings...")
         precomputed_centroids = self._load_precomputed_business_embeddings()
         if precomputed_centroids:
             self.category_centroids = precomputed_centroids
             self.deployment_optimization['using_precomputed_business_embeddings'] = True
-            print(f"✅ DEBUG: Loaded pre-computed business embeddings for {len(precomputed_centroids)} categories")
-            self.logger.info(f"✅ Loaded pre-computed business embeddings for {len(precomputed_centroids)} categories")
+            self.logger.info(f"✅ DEPLOYMENT OPTIMIZATION: Loaded pre-computed business embeddings for {len(precomputed_centroids)} categories")
             return
         
         # FALLBACK: Original computation path (preserves existing functionality)
-        print("❌ DEBUG: Pre-computed embeddings not found, using original computation...")
-        self.logger.info("Pre-computed embeddings not found, using original computation...")
+        self.logger.info("⚙️ Using original computation path (no pre-computed embeddings found)")
         
         # 1) Keyword/description-based representatives
         keyword_category_texts: Dict[str, List[str]] = {}
@@ -171,11 +168,10 @@ class Level1BusinessClassifier:
         if precomputed_dataset_centroids:
             dataset_centroids = precomputed_dataset_centroids
             self.deployment_optimization['using_precomputed_dataset_centroids'] = True
-            print(f"✅ DEBUG: Loaded pre-computed dataset centroids for {len(dataset_centroids)} categories")
-            self.logger.info(f"Loaded pre-computed dataset centroids for {len(dataset_centroids)} categories")
+            self.logger.info(f"✅ DEPLOYMENT OPTIMIZATION: Loaded pre-computed dataset centroids for {len(dataset_centroids)} categories")
         else:
             # FALLBACK: Original dataset centroid computation
-            print("🔧 DEBUG: Computing dataset centroids from historical data...")
+            self.logger.info("⚙️ Computing dataset centroids from historical data...")
             data_path = Path('data/processed/consolidated_tickets.csv')
             if pd is not None and data_path.exists():
                 try:
@@ -1039,8 +1035,6 @@ class Level1BusinessClassifier:
             Dictionary mapping category names to embeddings, or None if not available
         """
         try:
-            print(f"🔧 DEBUG: Current working directory: {Path.cwd()}")
-            
             # Look for pre-computed embeddings in deployment asset locations
             possible_locations = [
                 Path.cwd() / 'deployment' / 'assets' / 'embeddings',  # Development
@@ -1048,29 +1042,21 @@ class Level1BusinessClassifier:
                 Path(__file__).parent.parent.parent.parent / 'deployment' / 'assets' / 'embeddings',  # Relative to src
             ]
             
-            for i, embeddings_dir in enumerate(possible_locations):
+            for embeddings_dir in possible_locations:
                 embeddings_file = embeddings_dir / 'business_categories.npy'
                 metadata_file = embeddings_dir / 'business_metadata.json'
                 
-                print(f"🔧 DEBUG: Checking location {i+1}: {embeddings_dir}")
-                print(f"🔧 DEBUG: NPY exists: {embeddings_file.exists()}, JSON exists: {metadata_file.exists()}")
-                
                 if embeddings_file.exists() and metadata_file.exists():
-                    print(f"✅ DEBUG: Found assets at {embeddings_dir}")
-                    
                     # Load embeddings and metadata
                     embeddings_array = np.load(embeddings_file)
-                    print(f"🔧 DEBUG: Loaded embeddings shape: {embeddings_array.shape}")
                     
                     with open(metadata_file, 'r') as f:
                         metadata = json.load(f)
                     
                     # Verify metadata integrity
                     business_names = metadata.get('business_names', [])
-                    print(f"🔧 DEBUG: Business names count: {len(business_names)}")
                     
                     if len(business_names) != embeddings_array.shape[0]:
-                        print(f"❌ DEBUG: Embedding count mismatch: {len(business_names)} names vs {embeddings_array.shape[0]} embeddings")
                         self.logger.warning(f"Embedding count mismatch in {embeddings_file}")
                         continue
                     
@@ -1079,16 +1065,11 @@ class Level1BusinessClassifier:
                     for i, category_name in enumerate(business_names):
                         category_centroids[category_name] = embeddings_array[i]
                     
-                    print(f"✅ DEBUG: Successfully created centroids for {len(category_centroids)} categories")
-                    self.logger.info(f"Loaded pre-computed embeddings from {embeddings_file}")
+                    self.logger.info(f"✅ Loaded pre-computed embeddings from {embeddings_file}")
                     return category_centroids
             
-            print("❌ DEBUG: No valid embeddings found in any location")
             return None
             
         except Exception as e:
-            print(f"❌ DEBUG: Exception in loading: {e}")
-            import traceback
-            traceback.print_exc()
             self.logger.warning(f"Failed to load pre-computed embeddings: {e}")
             return None

@@ -85,11 +85,16 @@ def main():
         if st.button("🔄 Initialize Three-Tier System", type="primary"):
             with st.spinner("Initializing advanced classification system..."):
                 try:
+                    # Show real-time initialization progress
+                    progress_placeholder = st.empty()
+                    progress_placeholder.write("🔧 Starting initialization...")
+                    
                     st.session_state.classification_engine = ThreeTierDemoEngine(
                         use_embeddings=True, 
                         use_llm=True  # Enable LLM for better automation analysis
                     )
                     st.session_state.engine_ready = True
+                    progress_placeholder.empty()
                     st.success("🎯 Three-tier classification system ready!")
                     st.rerun()  # Refresh to show updated status
                     
