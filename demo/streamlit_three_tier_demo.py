@@ -41,6 +41,47 @@ def main():
         # System initialization
         st.subheader("⚙️ System Controls")
         
+        # Debug button for deployment troubleshooting
+        if st.button("🔧 Show Debug Info"):
+            st.write("**🔧 Deployment Debug Info:**")
+            import os
+            from pathlib import Path
+            
+            st.write(f"- Working Directory: `{os.getcwd()}`")
+            st.write(f"- src/ exists: {os.path.exists('src')}")
+            st.write(f"- deployment/ exists: {os.path.exists('deployment')}")
+            st.write(f"- deployment/assets/ exists: {os.path.exists('deployment/assets')}")
+            
+            if os.path.exists('deployment/assets'):
+                st.write(f"- Model bundle exists: {os.path.exists('deployment/assets/models/all-MiniLM-L6-v2')}")
+                st.write(f"- Embeddings folder exists: {os.path.exists('deployment/assets/embeddings')}")
+                
+                if os.path.exists('deployment/assets/embeddings'):
+                    embeddings_path = Path('deployment/assets/embeddings')
+                    npy_files = list(embeddings_path.glob('*.npy'))
+                    json_files = list(embeddings_path.glob('*.json'))
+                    st.write(f"- NPY files found: {len(npy_files)} ({[f.name for f in npy_files]})")
+                    st.write(f"- JSON files found: {len(json_files)} ({[f.name for f in json_files]})")
+            
+            # Environment variables
+            st.write("**Environment Variables:**")
+            env_vars = ['STREAMLIT_SHARING_MODE', 'STREAMLIT_SERVER_ADDRESS', 'PORT', 'HOSTNAME']
+            for var in env_vars:
+                value = os.environ.get(var, 'Not set')
+                st.write(f"- {var}: `{value}`")
+            
+            # Show if cloud detection would trigger
+            is_cloud = (
+                os.environ.get('STREAMLIT_SHARING_MODE') or
+                os.environ.get('STREAMLIT_SERVER_ADDRESS') == '0.0.0.0' or
+                os.environ.get('DYNO') or
+                os.environ.get('RAILWAY_ENVIRONMENT') or
+                os.environ.get('VERCEL') or
+                any(cloud in os.environ.get('HOSTNAME', '').lower() for cloud in ['streamlit', 'heroku', 'railway']) or
+                (os.environ.get('PORT') and not os.path.exists('src'))
+            )
+            st.write(f"**Cloud deployment detected: {is_cloud}**")
+        
         if st.button("🔄 Initialize Three-Tier System", type="primary"):
             with st.spinner("Initializing advanced classification system..."):
                 try:
@@ -84,6 +125,34 @@ def main():
                         st.write("2. Check that the src/ directory structure is preserved")
                         st.write("3. Verify requirements.txt includes all dependencies")
                         st.write("4. Try redeploying the application")
+                        
+                        # Add debugging information visible in UI
+                        st.write("**🔧 Deployment Debug Info:**")
+                        import os
+                        from pathlib import Path
+                        
+                        st.write(f"- Working Directory: `{os.getcwd()}`")
+                        st.write(f"- src/ exists: {os.path.exists('src')}")
+                        st.write(f"- deployment/ exists: {os.path.exists('deployment')}")
+                        st.write(f"- deployment/assets/ exists: {os.path.exists('deployment/assets')}")
+                        
+                        if os.path.exists('deployment/assets'):
+                            st.write(f"- Model bundle exists: {os.path.exists('deployment/assets/models/all-MiniLM-L6-v2')}")
+                            st.write(f"- Embeddings folder exists: {os.path.exists('deployment/assets/embeddings')}")
+                            
+                            if os.path.exists('deployment/assets/embeddings'):
+                                embeddings_path = Path('deployment/assets/embeddings')
+                                npy_files = list(embeddings_path.glob('*.npy'))
+                                json_files = list(embeddings_path.glob('*.json'))
+                                st.write(f"- NPY files found: {len(npy_files)} ({[f.name for f in npy_files]})")
+                                st.write(f"- JSON files found: {len(json_files)} ({[f.name for f in json_files]})")
+                        
+                        # Environment variables
+                        st.write("**Environment Variables:**")
+                        env_vars = ['STREAMLIT_SHARING_MODE', 'STREAMLIT_SERVER_ADDRESS', 'PORT', 'HOSTNAME']
+                        for var in env_vars:
+                            value = os.environ.get(var, 'Not set')
+                            st.write(f"- {var}: `{value}`")
         
         # Show system status
         if st.session_state.engine_ready:
