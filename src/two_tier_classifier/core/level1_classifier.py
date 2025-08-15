@@ -107,6 +107,16 @@ class Level1BusinessClassifier:
             'low_confidence_predictions': 0
         }
         
+        # Deployment optimization tracking
+        self.deployment_optimization = {
+            'using_bundled_model': False,
+            'using_precomputed_business_embeddings': False,
+            'using_precomputed_dataset_centroids': False,
+            'using_precomputed_discriminative_head': False,
+            'using_precomputed_parameter_tuning': False,
+            'optimization_active': False
+        }
+        
         # Initialize category representations
         self._initialize_category_representations()
 
@@ -116,6 +126,9 @@ class Level1BusinessClassifier:
         self._tune_blend_weight()
         # Tune keyword/guard weights on held-out validation set
         self._tune_keyword_and_guard_weights()
+        
+        # Update optimization status
+        self._update_optimization_status()
         
         self.logger.info("Level1BusinessClassifier initialized successfully")
     
@@ -128,6 +141,7 @@ class Level1BusinessClassifier:
         precomputed_centroids = self._load_precomputed_business_embeddings()
         if precomputed_centroids:
             self.category_centroids = precomputed_centroids
+            self.deployment_optimization['using_precomputed_business_embeddings'] = True
             print(f"✅ DEBUG: Loaded pre-computed business embeddings for {len(precomputed_centroids)} categories")
             self.logger.info(f"✅ Loaded pre-computed business embeddings for {len(precomputed_centroids)} categories")
             return
@@ -156,6 +170,7 @@ class Level1BusinessClassifier:
         precomputed_dataset_centroids = self._load_precomputed_dataset_centroids()
         if precomputed_dataset_centroids:
             dataset_centroids = precomputed_dataset_centroids
+            self.deployment_optimization['using_precomputed_dataset_centroids'] = True
             print(f"✅ DEBUG: Loaded pre-computed dataset centroids for {len(dataset_centroids)} categories")
             self.logger.info(f"Loaded pre-computed dataset centroids for {len(dataset_centroids)} categories")
         else:
@@ -219,6 +234,7 @@ class Level1BusinessClassifier:
             precomputed_head = self._load_precomputed_discriminative_head()
             if precomputed_head:
                 self.discriminative_head = precomputed_head
+                self.deployment_optimization['using_precomputed_discriminative_head'] = True
                 self.logger.info("Loaded pre-computed discriminative head")
                 return
             
@@ -556,6 +572,7 @@ class Level1BusinessClassifier:
                 self.weight_disc = blend_weights.get('weight_disc', self.weight_disc)
                 self.weight_cos = blend_weights.get('weight_cos', self.weight_cos)
             
+            self.deployment_optimization['using_precomputed_parameter_tuning'] = True
             self.logger.info("Loaded pre-computed parameter tuning results")
             return
         
@@ -863,6 +880,44 @@ class Level1BusinessClassifier:
         }
         
         return explanation
+    
+    def _update_optimization_status(self):
+        """Update overall optimization status based on components used."""
+        # Check if embedding engine is using bundled model
+        if hasattr(self.embedding_engine, 'model_source'):
+            self.deployment_optimization['using_bundled_model'] = (
+                self.embedding_engine.model_source == 'bundled'
+            )
+        
+        # Calculate overall optimization status
+        optimizations_used = sum([
+            self.deployment_optimization['using_bundled_model'],
+            self.deployment_optimization['using_precomputed_business_embeddings'],
+            self.deployment_optimization['using_precomputed_dataset_centroids'],
+            self.deployment_optimization['using_precomputed_parameter_tuning']
+        ])
+        
+        self.deployment_optimization['optimization_active'] = optimizations_used >= 2
+        
+        if self.deployment_optimization['optimization_active']:
+            self.logger.info(f"🚀 Deployment optimization ACTIVE: {optimizations_used}/4 optimizations enabled")
+        else:
+            self.logger.info("⚙️ Running in standard mode (no deployment optimizations)")
+    
+    def get_optimization_status(self) -> Dict[str, Any]:
+        """Get deployment optimization status for UI display."""
+        return {
+            'is_optimized': self.deployment_optimization['optimization_active'],
+            'optimizations_used': sum([
+                self.deployment_optimization['using_bundled_model'],
+                self.deployment_optimization['using_precomputed_business_embeddings'],
+                self.deployment_optimization['using_precomputed_dataset_centroids'],
+                self.deployment_optimization['using_precomputed_discriminative_head'],
+                self.deployment_optimization['using_precomputed_parameter_tuning']
+            ]),
+            'total_optimizations': 5,
+            'details': self.deployment_optimization.copy()
+        }
     
     def _load_precomputed_discriminative_head(self) -> Optional[DiscriminativeHead]:
         """

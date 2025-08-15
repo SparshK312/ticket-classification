@@ -94,6 +94,7 @@ class ThreeTierDemoEngine:
         self.data_loader = data_loader  # For compatibility, but not needed
         self.demo_mode = False  # Track if we're running in demo mode
         self.use_llm = use_llm  # Store LLM preference
+        self.optimization_status = None  # Track optimization status
         
         try:
             # Initialize our production three-tier classifier
@@ -128,6 +129,9 @@ class ThreeTierDemoEngine:
                         confidence_threshold=0.6,
                         enable_automation_analysis=True
                     )
+                    # Get optimization status after initialization
+                    if hasattr(self.classifier, 'level1_classifier'):
+                        self.optimization_status = self.classifier.level1_classifier.get_optimization_status()
                     self.logger.info("✅ ThreeTierClassifier initialized successfully for demo")
                 
             except Exception as init_error:

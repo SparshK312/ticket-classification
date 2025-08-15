@@ -56,6 +56,7 @@ class EmbeddingEngine:
         
         # Initialize model
         self.model = None
+        self.model_source = 'standard'  # Track whether using 'bundled' or 'standard' model
         self._load_model()
         
         # Performance tracking
@@ -79,6 +80,7 @@ class EmbeddingEngine:
             if bundled_model_path:
                 self.logger.info(f"Loading bundled model from: {bundled_model_path}")
                 self.model = SentenceTransformer(str(bundled_model_path))
+                self.model_source = 'bundled'
                 self.embedding_dim = self.model.get_sentence_embedding_dimension()
                 self.logger.info(f"✅ Bundled model loaded successfully. Embedding dimension: {self.embedding_dim}")
             else:
