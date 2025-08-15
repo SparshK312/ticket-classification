@@ -1,0 +1,31 @@
+{
+  "business_names": [
+    "Software & Application Issues",
+    "Back Office & Financial",
+    "Payment Processing",
+    "Vision Orders & Inventory",
+    "Printing Services",
+    "User Account Management",
+    "Email & Communications",
+    "Till Operations",
+    "Mobile Devices",
+    "General Support"
+  ],
+  "business_texts": [
+    "Software & Application Issues. Vision software, AppStream, End User Computing, application errors. Keywords: vision, appstream, application, software, app, loading, error, fusion, crash, hang",
+    "Back Office & Financial. Back Office operations, financial reporting, business operations. Keywords: back office, financial, finance, payment, double-charged, refund, transaction, banking, reconciliation, invoice",
+    "Payment Processing. Chip & Pin, card payment failures, PED devices. Keywords: chip, pin, chip pin, card payment, ped, payment device, verifone, terminal, contactless, card reader",
+    "Vision Orders & Inventory. Vision order amendments, SKU management, inventory operations. Keywords: vision, order, amend, sku, inventory, stock, product, catalog, supplier, delivery",
+    "Printing Services. All printing issues including EOD reports, label printing. Keywords: print, printer, printing, label, eod, report, pdf, paper, ink, toner",
+    "User Account Management. Active Directory, user accounts, permissions, 2-step verification. Keywords: active directory, ad, account, user, password, enable, disable, 2-step, verification, locked",
+    "Email & Communications. Google, Gmail, email issues, communication systems. Keywords: google, gmail, email, communication, duplicate, shared mailbox, group membership, charity email, mail",
+    "Till Operations. Till crashes, till functions, scanner issues, till banking. Keywords: till, scanner, crashed, banking, till function, barcode, checkout, register, pos, cashier",
+    "Mobile Devices. Zebra TC52X, handheld devices, mobile scanners, COPS application. Keywords: zebra, tc52x, mobile, handheld, scanner, cops, gun, battery, device, picker",
+    "General Support. Hardware issues, network, telephony, and miscellaneous support. Keywords: hardware, network, telephony, server, internet, connection, equipment, maintenance, general, help"
+  ],
+  "embedding_model": "all-MiniLM-L6-v2",
+  "embedding_dimension": 384,
+  "num_categories": 10,
+  "created_at": "2025-08-15T18:44:40.596259",
+  "normalization": "L2 normalized"
+}

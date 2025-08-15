@@ -1,0 +1,15 @@
+{
+  "blend_weights": {
+    "weight_disc": 0.6,
+    "weight_cos": 0.4
+  },
+  "keyword_weights": {
+    "weight_keyword": 0.2,
+    "weight_priority": 0.1,
+    "weight_exclusion": 0.15,
+    "general_support_penalty": 0.02,
+    "non_general_margin": 0.03
+  },
+  "tuned_at": "2025-08-15T18:44:43.325903",
+  "validation_accuracy": 0.77
+}

@@ -41,6 +41,9 @@ cache/
 .tmp/
 temp/
 
+# BUT ALLOW deployment asset numpy files
+!deployment/assets/**/*.npy
+
 # Output directories
 outputs/
 checkpoint_results/
@@ -75,6 +78,12 @@ notebooks/.ipynb_checkpoints/
 *.hdf5
 models/
 embeddings/
+
+# BUT ALLOW deployment assets (needed for cloud optimization)
+!deployment/assets/models/
+!deployment/assets/embeddings/
+!deployment/assets/embeddings/*.npy
+!deployment/assets/embeddings/*.json
 
 # Test coverage
 htmlcov/

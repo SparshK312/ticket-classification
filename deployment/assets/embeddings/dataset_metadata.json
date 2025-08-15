@@ -1,0 +1,18 @@
+{
+  "centroid_names": [
+    "Software & Application Issues",
+    "Back Office & Financial",
+    "Payment Processing",
+    "Vision Orders & Inventory",
+    "Printing Services",
+    "User Account Management",
+    "Email & Communications",
+    "Till Operations",
+    "Mobile Devices",
+    "General Support"
+  ],
+  "num_centroids": 10,
+  "embedding_dimension": 384,
+  "created_at": "2025-08-15T18:44:43.255615",
+  "source_data": "data/processed/consolidated_tickets.csv"
+}
