@@ -110,12 +110,27 @@ class ThreeTierDemoEngine:
                 import platform
                 
                 # More reliable cloud deployment detection
-                # Only use true deployment environment indicators, not missing files
+                # Only use true cloud deployment environment indicators
                 is_cloud_deployment = (
-                    os.environ.get('STREAMLIT_SERVER_PORT') or 
-                    os.environ.get('PORT') or
-                    'streamlit' in platform.platform().lower()
+                    # Streamlit Cloud specific indicators
+                    os.environ.get('STREAMLIT_SHARING_MODE') or
+                    os.environ.get('STREAMLIT_SERVER_ADDRESS') == '0.0.0.0' or
+                    # General cloud platform indicators
+                    os.environ.get('DYNO') or  # Heroku
+                    os.environ.get('RAILWAY_ENVIRONMENT') or  # Railway
+                    os.environ.get('VERCEL') or  # Vercel
+                    # Check if running on specific cloud hosts
+                    any(cloud in os.environ.get('HOSTNAME', '').lower() for cloud in ['streamlit', 'heroku', 'railway']) or
+                    # Last resort: check if we're definitely not in local development
+                    (os.environ.get('PORT') and not os.path.exists(str(Path.cwd() / 'src')))
                 )
+                
+                # Debug logging for environment detection
+                self.logger.info(f"Environment detection - Cloud deployment: {is_cloud_deployment}")
+                self.logger.info(f"STREAMLIT_SHARING_MODE: {os.environ.get('STREAMLIT_SHARING_MODE', 'Not set')}")
+                self.logger.info(f"STREAMLIT_SERVER_ADDRESS: {os.environ.get('STREAMLIT_SERVER_ADDRESS', 'Not set')}")
+                self.logger.info(f"Working directory: {os.getcwd()}")
+                self.logger.info(f"src/ exists: {os.path.exists(str(Path.cwd() / 'src'))}")
                 
                 if is_cloud_deployment:
                     self.logger.info("Cloud deployment detected - using demo mode for faster startup")
@@ -135,7 +150,10 @@ class ThreeTierDemoEngine:
                     self.logger.info("✅ ThreeTierClassifier initialized successfully for demo")
                 
             except Exception as init_error:
-                self.logger.warning(f"Production mode failed: {init_error}, switching to demo mode")
+                self.logger.error(f"Production mode failed with error: {init_error}")
+                import traceback
+                self.logger.error(f"Full traceback: {traceback.format_exc()}")
+                self.logger.warning("Switching to demo mode due to initialization failure")
                 self._initialize_demo_mode()
                 
         except Exception as e:
