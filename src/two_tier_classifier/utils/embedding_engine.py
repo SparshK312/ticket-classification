@@ -68,18 +68,47 @@ class EmbeddingEngine:
         }
     
     def _load_model(self):
-        """Load the sentence transformer model."""
+        """Load the sentence transformer model with deployment optimization."""
         if not SENTENCE_TRANSFORMERS_AVAILABLE:
             raise ImportError("sentence-transformers required. Install with: pip install sentence-transformers")
         
+        # Check for bundled deployment model first (deployment optimization)
+        bundled_model_path = self._find_bundled_model()
+        
         try:
-            self.logger.info(f"Loading sentence transformer model: {self.model_name}")
-            self.model = SentenceTransformer(self.model_name)
-            self.embedding_dim = self.model.get_sentence_embedding_dimension()
-            self.logger.info(f"Model loaded successfully. Embedding dimension: {self.embedding_dim}")
+            if bundled_model_path:
+                self.logger.info(f"Loading bundled model from: {bundled_model_path}")
+                self.model = SentenceTransformer(str(bundled_model_path))
+                self.embedding_dim = self.model.get_sentence_embedding_dimension()
+                self.logger.info(f"✅ Bundled model loaded successfully. Embedding dimension: {self.embedding_dim}")
+            else:
+                # Fall back to standard loading (works exactly as before)
+                self.logger.info(f"Loading sentence transformer model: {self.model_name}")
+                self.model = SentenceTransformer(self.model_name)
+                self.embedding_dim = self.model.get_sentence_embedding_dimension()
+                self.logger.info(f"Model loaded successfully. Embedding dimension: {self.embedding_dim}")
         except Exception as e:
             self.logger.error(f"Failed to load model {self.model_name}: {e}")
             raise
+    
+    def _find_bundled_model(self) -> Optional[Path]:
+        """Find bundled deployment model if available."""
+        try:
+            # Look for deployment assets in common locations
+            possible_locations = [
+                Path.cwd() / 'deployment' / 'assets' / 'models' / self.model_name,  # Development
+                Path.cwd() / 'assets' / 'models' / self.model_name,  # Deployment  
+                Path(__file__).parent.parent.parent.parent / 'deployment' / 'assets' / 'models' / self.model_name,  # Relative to src
+            ]
+            
+            for model_path in possible_locations:
+                if model_path.exists() and (model_path / 'config.json').exists():
+                    return model_path
+            
+            return None
+        except Exception:
+            # If anything goes wrong with bundled model detection, fall back silently
+            return None
     
     def embed(self, texts: Union[str, List[str]], 
               use_cache: Optional[bool] = None) -> np.ndarray:

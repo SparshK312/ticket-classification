@@ -8,6 +8,7 @@ with 85%+ accuracy target and comprehensive confidence scoring.
 import numpy as np
 import logging
 import time
+import json
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 from pathlib import Path
@@ -121,6 +122,16 @@ class Level1BusinessClassifier:
     def _initialize_category_representations(self):
         """Initialize category representations using keywords and, if available, dataset-derived texts."""
         self.logger.info("Initializing category representations...")
+        
+        # DEPLOYMENT OPTIMIZATION: Try to load pre-computed embeddings first
+        precomputed_centroids = self._load_precomputed_business_embeddings()
+        if precomputed_centroids:
+            self.category_centroids = precomputed_centroids
+            self.logger.info(f"✅ Loaded pre-computed business embeddings for {len(precomputed_centroids)} categories")
+            return
+        
+        # FALLBACK: Original computation path (preserves existing functionality)
+        self.logger.info("Pre-computed embeddings not found, using original computation...")
         
         # 1) Keyword/description-based representatives
         keyword_category_texts: Dict[str, List[str]] = {}
@@ -812,3 +823,49 @@ class Level1BusinessClassifier:
         }
         
         return explanation
+    
+    def _load_precomputed_business_embeddings(self) -> Optional[Dict[str, np.ndarray]]:
+        """
+        Load pre-computed business category embeddings for deployment optimization.
+        
+        Returns:
+            Dictionary mapping category names to embeddings, or None if not available
+        """
+        try:
+            # Look for pre-computed embeddings in deployment asset locations
+            possible_locations = [
+                Path.cwd() / 'deployment' / 'assets' / 'embeddings',  # Development
+                Path.cwd() / 'assets' / 'embeddings',  # Deployment
+                Path(__file__).parent.parent.parent.parent / 'deployment' / 'assets' / 'embeddings',  # Relative to src
+            ]
+            
+            for embeddings_dir in possible_locations:
+                embeddings_file = embeddings_dir / 'business_categories.npy'
+                metadata_file = embeddings_dir / 'business_metadata.json'
+                
+                if embeddings_file.exists() and metadata_file.exists():
+                    # Load embeddings and metadata
+                    embeddings_array = np.load(embeddings_file)
+                    
+                    with open(metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                    
+                    # Verify metadata integrity
+                    business_names = metadata.get('business_names', [])
+                    if len(business_names) != embeddings_array.shape[0]:
+                        self.logger.warning(f"Embedding count mismatch in {embeddings_file}")
+                        continue
+                    
+                    # Create category centroids dictionary
+                    category_centroids = {}
+                    for i, category_name in enumerate(business_names):
+                        category_centroids[category_name] = embeddings_array[i]
+                    
+                    self.logger.info(f"Loaded pre-computed embeddings from {embeddings_file}")
+                    return category_centroids
+            
+            return None
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to load pre-computed embeddings: {e}")
+            return None

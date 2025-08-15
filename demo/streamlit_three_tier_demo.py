@@ -45,24 +45,76 @@ def main():
                 try:
                     st.session_state.classification_engine = ThreeTierDemoEngine(
                         use_embeddings=True, 
-                        use_llm=False  # Disable LLM for demo stability
+                        use_llm=True  # Enable LLM for better automation analysis
                     )
                     st.session_state.engine_ready = True
                     st.success("🎯 Three-tier classification system ready!")
+                    st.rerun()  # Refresh to show updated status
                     
                 except Exception as e:
                     st.error(f"❌ System initialization failed: {e}")
                     st.session_state.engine_ready = False
+                    
+                    # Enhanced error diagnostics for deployment debugging
+                    with st.expander("🔧 Debug Information (click to expand)"):
+                        st.write("**Error Details:**")
+                        st.code(str(e))
+                        
+                        st.write("**Environment Information:**")
+                        import os
+                        st.write(f"- Current Working Directory: `{os.getcwd()}`")
+                        st.write(f"- Python Path: `{':'.join(sys.path[:3])}...`")
+                        
+                        # Check if required files exist
+                        st.write("**File System Check:**")
+                        required_files = [
+                            "src/two_tier_classifier/core/pipeline_controller.py",
+                            "demo/three_tier_classification_engine.py",
+                            "requirements.txt"
+                        ]
+                        
+                        for file_path in required_files:
+                            exists = os.path.exists(file_path)
+                            status = "✅" if exists else "❌"
+                            st.write(f"{status} `{file_path}`")
+                        
+                        st.write("**Possible Solutions:**")
+                        st.write("1. Ensure all required files are uploaded to Streamlit Cloud")
+                        st.write("2. Check that the src/ directory structure is preserved")
+                        st.write("3. Verify requirements.txt includes all dependencies")
+                        st.write("4. Try redeploying the application")
         
         # Show system status
         if st.session_state.engine_ready:
-            st.success("✅ System Status: READY")
-            
-            st.markdown("**🔧 System Components:**")
-            st.markdown("✅ Level 1: Business Classification")
-            st.markdown("✅ Level 2: Semantic Problem Search") 
-            st.markdown("✅ Level 3: Automation Analysis")
-            st.markdown("✅ Manager Requirements Integration")
+            # Check if running in demo mode
+            if hasattr(st.session_state.classification_engine, 'demo_mode') and st.session_state.classification_engine.demo_mode:
+                st.warning("⚡ System Status: DEMO MODE")
+                st.info("Running in lightweight demo mode for deployment compatibility")
+                
+                st.markdown("**🔧 Demo Components:**")
+                st.markdown("✅ Pattern-based Business Classification")
+                st.markdown("✅ Keyword-driven Problem Matching") 
+                st.markdown("✅ Rule-based Automation Analysis")
+                st.markdown("✅ Fast Response (<50ms)")
+                
+                with st.expander("ℹ️ About Demo Mode"):
+                    st.markdown("""
+                    **Demo Mode Features:**
+                    - 🚀 **Fast initialization** - No ML model downloads
+                    - 🎯 **Pattern matching** - Uses keyword-based classification
+                    - 📊 **Realistic results** - Demonstrates system capabilities
+                    - ⚡ **Instant response** - No embedding computation delays
+                    
+                    **Note:** Production mode with full ML models is available locally.
+                    """)
+            else:
+                st.success("✅ System Status: PRODUCTION MODE")
+                
+                st.markdown("**🔧 System Components:**")
+                st.markdown("✅ Level 1: Business Classification")
+                st.markdown("✅ Level 2: Semantic Problem Search") 
+                st.markdown("✅ Level 3: Automation Analysis")
+                st.markdown("✅ Manager Requirements Integration")
             
         else:
             st.warning("⚠️ System Status: NOT READY")
