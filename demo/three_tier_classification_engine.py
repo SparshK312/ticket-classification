@@ -148,11 +148,28 @@ class ThreeTierDemoEngine:
                 else:
                     self.logger.warning("No deployment assets found - optimization will not be available")
                 
-                if is_cloud_deployment:
-                    self.logger.info("Cloud deployment detected - using demo mode for faster startup")
+                # Check if we have deployment assets available for optimization
+                assets_available = (
+                    assets_path.exists() and 
+                    (assets_path / 'models' / 'all-MiniLM-L6-v2').exists() and
+                    (assets_path / 'embeddings').exists()
+                )
+                
+                if assets_available:
+                    # Use production mode with optimization assets (local OR cloud)
+                    mode_desc = "cloud with optimization assets" if is_cloud_deployment else "local development"
+                    self.logger.info(f"Assets available - initializing production mode for {mode_desc}")
+                    self.classifier = ThreeTierClassifier(
+                        model_name='all-MiniLM-L6-v2',
+                        cache_dir=cache_dir,
+                        confidence_threshold=0.6,
+                        enable_automation_analysis=True
+                    )
+                elif is_cloud_deployment:
+                    self.logger.info("Cloud deployment without assets - using demo mode for faster startup")
                     self._initialize_demo_mode()
                 else:
-                    # Try production mode for local development
+                    # Local development without assets - try production mode anyway
                     self.logger.info("Local development environment detected - initializing full production mode")
                     self.classifier = ThreeTierClassifier(
                         model_name='all-MiniLM-L6-v2',
@@ -160,22 +177,24 @@ class ThreeTierDemoEngine:
                         confidence_threshold=0.6,
                         enable_automation_analysis=True
                     )
-                    # Get optimization status after initialization
-                    if hasattr(self.classifier, 'level1_classifier'):
-                        # Safe method call with fallback for cloud deployment compatibility
-                        level1 = self.classifier.level1_classifier
-                        if hasattr(level1, 'get_optimization_status'):
-                            self.optimization_status = level1.get_optimization_status()
-                        else:
-                            # Fallback: manually check optimization status
-                            self.optimization_status = {
-                                'is_optimized': hasattr(level1, 'deployment_optimization'),
-                                'optimizations_used': 0,
-                                'total_optimizations': 5,
-                                'details': getattr(level1, 'deployment_optimization', {})
-                            }
-                            self.logger.warning("get_optimization_status method not available, using fallback")
-                    self.logger.info("✅ ThreeTierClassifier initialized successfully for demo")
+                    
+                # Get optimization status after initialization (for both asset and non-asset cases)
+                if hasattr(self, 'classifier') and self.classifier and hasattr(self.classifier, 'level1_classifier'):
+                    # Safe method call with fallback for cloud deployment compatibility
+                    level1 = self.classifier.level1_classifier
+                    if hasattr(level1, 'get_optimization_status'):
+                        self.optimization_status = level1.get_optimization_status()
+                    else:
+                        # Fallback: manually check optimization status
+                        self.optimization_status = {
+                            'is_optimized': hasattr(level1, 'deployment_optimization'),
+                            'optimizations_used': 0,
+                            'total_optimizations': 5,
+                            'details': getattr(level1, 'deployment_optimization', {})
+                        }
+                        self.logger.warning("get_optimization_status method not available, using fallback")
+                    
+                self.logger.info("✅ ThreeTierClassifier initialized successfully for demo")
                 
             except Exception as init_error:
                 self.logger.error(f"Production mode failed with error: {init_error}")
