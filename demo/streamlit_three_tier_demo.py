@@ -85,16 +85,45 @@ def main():
         if st.button("🔄 Initialize Three-Tier System", type="primary"):
             with st.spinner("Initializing advanced classification system..."):
                 try:
-                    # Show real-time initialization progress
-                    progress_placeholder = st.empty()
-                    progress_placeholder.write("🔧 Starting initialization...")
+                    # Real-time debugging for initialization
+                    debug_container = st.container()
+                    with debug_container:
+                        st.write("🔧 **Initialization Debug:**")
+                        
+                        # Check critical files before initialization
+                        import os
+                        from pathlib import Path
+                        
+                        csv_exists = os.path.exists('data/processed/consolidated_tickets.csv')
+                        st.write(f"📄 CSV file exists: **{csv_exists}**")
+                        
+                        if csv_exists:
+                            csv_size = os.path.getsize('data/processed/consolidated_tickets.csv') / 1024 / 1024
+                            st.write(f"📊 CSV file size: **{csv_size:.1f}MB**")
+                        
+                        # Check asset files again
+                        assets_path = Path('deployment/assets/embeddings')
+                        if assets_path.exists():
+                            npy_files = list(assets_path.glob('*.npy'))
+                            st.write(f"🗂️ Pre-computed assets: **{len(npy_files)} NPY files found**")
+                        
+                        st.write("⏱️ **Starting ThreeTierDemoEngine initialization...**")
+                        
+                        import time
+                        start_time = time.time()
                     
                     st.session_state.classification_engine = ThreeTierDemoEngine(
                         use_embeddings=True, 
                         use_llm=True  # Enable LLM for better automation analysis
                     )
+                    
+                    init_time = time.time() - start_time
                     st.session_state.engine_ready = True
-                    progress_placeholder.empty()
+                    
+                    # Show completion info
+                    with debug_container:
+                        st.write(f"✅ **Initialization completed in {init_time:.1f} seconds**")
+                    
                     st.success("🎯 Three-tier classification system ready!")
                     st.rerun()  # Refresh to show updated status
                     
