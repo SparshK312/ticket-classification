@@ -171,39 +171,43 @@ class Level1BusinessClassifier:
             self.logger.info(f"✅ DEPLOYMENT OPTIMIZATION: Loaded pre-computed dataset centroids for {len(dataset_centroids)} categories")
         else:
             # FALLBACK: Original dataset centroid computation
-            self.logger.info("⚙️ Computing dataset centroids from historical data...")
-            data_path = Path('data/processed/consolidated_tickets.csv')
-            if pd is not None and data_path.exists():
-                try:
-                    df = pd.read_csv(data_path, usecols=['Category', 'Short description'])
-                    df = df.dropna(subset=['Short description'])
-                    # Map raw to business
-                    mapped = map_raw_categories(df['Category'].tolist())
-                    df = df.assign(BusinessCategory=mapped)
-                    # Filter invalid
-                    df = df.dropna(subset=['BusinessCategory'])
-                    # Limit per category to reduce bias and speed
-                    per_category_limit = 500
-                    category_to_texts: Dict[str, List[str]] = {}
-                    for cat_name in self.category_names:
-                        # cat_name is BusinessCategory enum value string
-                        # Our definitions use definition.name which matches these strings
-                        sample = df[df['BusinessCategory'] == cat_name]['Short description'].astype(str).head(per_category_limit).tolist()
-                        if sample:
-                            category_to_texts[cat_name] = sample
+            # DEPLOYMENT OPTIMIZATION: Skip if we already have business embeddings loaded
+            if hasattr(self, 'deployment_optimization') and self.deployment_optimization.get('using_precomputed_business_embeddings', False):
+                self.logger.info("⚡ Skipping dataset centroid computation - using pre-computed business embeddings")
+            else:
+                self.logger.info("⚙️ Computing dataset centroids from historical data...")
+                data_path = Path('data/processed/consolidated_tickets.csv')
+                if pd is not None and data_path.exists():
+                    try:
+                        df = pd.read_csv(data_path, usecols=['Category', 'Short description'])
+                        df = df.dropna(subset=['Short description'])
+                        # Map raw to business
+                        mapped = map_raw_categories(df['Category'].tolist())
+                        df = df.assign(BusinessCategory=mapped)
+                        # Filter invalid
+                        df = df.dropna(subset=['BusinessCategory'])
+                        # Limit per category to reduce bias and speed
+                        per_category_limit = 500
+                        category_to_texts: Dict[str, List[str]] = {}
+                        for cat_name in self.category_names:
+                            # cat_name is BusinessCategory enum value string
+                            # Our definitions use definition.name which matches these strings
+                            sample = df[df['BusinessCategory'] == cat_name]['Short description'].astype(str).head(per_category_limit).tolist()
+                            if sample:
+                                category_to_texts[cat_name] = sample
 
-                    # Create centroids from dataset texts
-                    for cat_name, texts in category_to_texts.items():
-                        if not texts:
-                            continue
-                        embeddings = self.embedding_engine.embed_batch(texts[:per_category_limit])
-                        if embeddings.size == 0:
-                            continue
-                        centroid = np.mean(embeddings, axis=0)
-                        dataset_centroids[cat_name] = centroid / (np.linalg.norm(centroid) + 1e-12)
-                    self.logger.info(f"Dataset-derived centroids created for {len(dataset_centroids)} categories")
-                except Exception as e:
-                    self.logger.warning(f"Failed to build dataset-derived centroids: {e}")
+                        # Create centroids from dataset texts
+                        for cat_name, texts in category_to_texts.items():
+                            if not texts:
+                                continue
+                            embeddings = self.embedding_engine.embed_batch(texts[:per_category_limit])
+                            if embeddings.size == 0:
+                                continue
+                            centroid = np.mean(embeddings, axis=0)
+                            dataset_centroids[cat_name] = centroid / (np.linalg.norm(centroid) + 1e-12)
+                        self.logger.info(f"Dataset-derived centroids created for {len(dataset_centroids)} categories")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to build dataset-derived centroids: {e}")
 
         # 3) Blend centroids when both available
         blended_centroids: Dict[str, np.ndarray] = {}
@@ -254,6 +258,11 @@ class Level1BusinessClassifier:
 
     def _tune_blend_weight(self):
         """Data-driven tuning of discriminative vs centroid blend on a held-out sample."""
+        # DEPLOYMENT OPTIMIZATION: Skip if we have pre-computed parameters
+        if hasattr(self, 'deployment_optimization') and self.deployment_optimization.get('using_precomputed_parameter_tuning', False):
+            self.logger.info("⚡ Skipping blend weight tuning - using pre-computed parameters")
+            return
+            
         if self.discriminative_head is None:
             return
         if pd is None:
