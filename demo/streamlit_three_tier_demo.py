@@ -101,21 +101,68 @@ def main():
                             csv_size = os.path.getsize('data/processed/consolidated_tickets.csv') / 1024 / 1024
                             st.write(f"📊 CSV file size: **{csv_size:.1f}MB**")
                         
-                        # Check asset files again
+                        # Check asset files in detail
+                        st.write("🔍 **Asset File Check:**")
                         assets_path = Path('deployment/assets/embeddings')
                         if assets_path.exists():
-                            npy_files = list(assets_path.glob('*.npy'))
-                            st.write(f"🗂️ Pre-computed assets: **{len(npy_files)} NPY files found**")
+                            # Check specific optimization files
+                            param_file = assets_path / 'parameter_tuning.json'
+                            business_npy = assets_path / 'business_categories.npy'
+                            business_json = assets_path / 'business_metadata.json'
+                            
+                            st.write(f"  - `parameter_tuning.json`: **{param_file.exists()}**")
+                            st.write(f"  - `business_categories.npy`: **{business_npy.exists()}**")
+                            st.write(f"  - `business_metadata.json`: **{business_json.exists()}**")
+                            
+                            if param_file.exists():
+                                try:
+                                    import json
+                                    with open(param_file, 'r') as f:
+                                        param_data = json.load(f)
+                                    st.write(f"  - Parameter file keys: **{list(param_data.keys())}**")
+                                except Exception as e:
+                                    st.write(f"  - Parameter file read error: **{e}**")
+                        else:
+                            st.write("❌ Assets path does not exist")
                         
                         st.write("⏱️ **Starting ThreeTierDemoEngine initialization...**")
                         
                         import time
                         start_time = time.time()
+                        
+                        # Create a log capture container
+                        log_container = st.empty()
                     
-                    st.session_state.classification_engine = ThreeTierDemoEngine(
-                        use_embeddings=True, 
-                        use_llm=True  # Enable LLM for better automation analysis
-                    )
+                    # Capture logs during initialization
+                    import logging
+                    import io
+                    
+                    # Create a string buffer to capture logs
+                    log_capture = io.StringIO()
+                    log_handler = logging.StreamHandler(log_capture)
+                    log_handler.setLevel(logging.INFO)
+                    
+                    # Add handler to relevant loggers
+                    level1_logger = logging.getLogger('two_tier_classifier.core.level1_classifier')
+                    level1_logger.addHandler(log_handler)
+                    level1_logger.setLevel(logging.INFO)
+                    
+                    try:
+                        st.session_state.classification_engine = ThreeTierDemoEngine(
+                            use_embeddings=True, 
+                            use_llm=True  # Enable LLM for better automation analysis
+                        )
+                        
+                        # Show captured logs
+                        log_output = log_capture.getvalue()
+                        if log_output:
+                            with debug_container:
+                                st.write("📋 **Initialization Logs:**")
+                                st.code(log_output, language="text")
+                                
+                    finally:
+                        # Clean up log handler
+                        level1_logger.removeHandler(log_handler)
                     
                     init_time = time.time() - start_time
                     st.session_state.engine_ready = True

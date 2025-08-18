@@ -53,7 +53,8 @@ class Level1BusinessClassifier:
                  model_name: str = 'all-MiniLM-L6-v2',
                  cache_dir: Optional[str] = 'cache/embeddings',
                  confidence_threshold: float = 0.6,
-                 enable_preprocessing: bool = True):
+                 enable_preprocessing: bool = True,
+                 cloud_mode: bool = False):
         """
         Initialize the Level 1 classifier.
         
@@ -122,10 +123,16 @@ class Level1BusinessClassifier:
 
         # Initialize discriminative head if possible
         self._initialize_discriminative_head()
-        # Tune blend weight if possible
-        self._tune_blend_weight()
-        # Tune keyword/guard weights on held-out validation set
-        self._tune_keyword_and_guard_weights()
+        
+        # DEPLOYMENT OPTIMIZATION: Skip expensive tuning if we have pre-computed results
+        if not (hasattr(self, 'deployment_optimization') and 
+                self.deployment_optimization.get('using_precomputed_parameter_tuning', False)):
+            # Tune blend weight if possible
+            self._tune_blend_weight()
+            # Tune keyword/guard weights on held-out validation set
+            self._tune_keyword_and_guard_weights()
+        else:
+            self.logger.info("⚡ DEPLOYMENT OPTIMIZATION: Skipping all parameter tuning - using pre-computed results")
         
         # Update optimization status
         self._update_optimization_status()
@@ -137,6 +144,7 @@ class Level1BusinessClassifier:
         self.logger.info("Initializing category representations...")
         
         # DEPLOYMENT OPTIMIZATION: Try to load pre-computed embeddings first
+        self.logger.info("🔧 Attempting to load pre-computed business embeddings...")
         precomputed_centroids = self._load_precomputed_business_embeddings()
         if precomputed_centroids:
             self.category_centroids = precomputed_centroids
@@ -145,7 +153,7 @@ class Level1BusinessClassifier:
             return
         
         # FALLBACK: Original computation path (preserves existing functionality)
-        self.logger.info("⚙️ Using original computation path (no pre-computed embeddings found)")
+        self.logger.warning("❌ Pre-computed business embeddings failed - falling back to EXPENSIVE computation")
         
         # 1) Keyword/description-based representatives
         keyword_category_texts: Dict[str, List[str]] = {}
@@ -563,8 +571,10 @@ class Level1BusinessClassifier:
         accuracy. Keeps search small to maintain startup performance.
         """
         # DEPLOYMENT OPTIMIZATION: Try to load pre-computed parameter tuning first
+        self.logger.info("🔧 Attempting to load pre-computed parameter tuning...")
         precomputed_params = self._load_precomputed_parameter_tuning()
         if precomputed_params:
+            self.logger.info("✅ Successfully loaded pre-computed parameter tuning")
             self.weight_keyword = precomputed_params.get('weight_keyword', self.weight_keyword)
             self.weight_priority = precomputed_params.get('weight_priority', self.weight_priority)
             self.weight_exclusion = precomputed_params.get('weight_exclusion', self.weight_exclusion)
@@ -582,11 +592,13 @@ class Level1BusinessClassifier:
             return
         
         # FALLBACK: Original parameter tuning (preserves existing functionality)
+        self.logger.warning("❌ Pre-computed parameter tuning failed - falling back to EXPENSIVE CSV processing")
         if pd is None:
             return
         data_path = Path('data/processed/consolidated_tickets.csv')
         if not data_path.exists():
             return
+        self.logger.info(f"📄 Loading CSV file for parameter tuning: {data_path} ({data_path.stat().st_size / 1024 / 1024:.1f}MB)")
         try:
             df = pd.read_csv(data_path, usecols=['Category', 'Short description'])
             df = df.dropna(subset=['Short description'])
@@ -973,20 +985,27 @@ class Level1BusinessClassifier:
                 Path(__file__).parent.parent.parent.parent / 'deployment' / 'assets' / 'embeddings',  # Relative to src
             ]
             
-            for embeddings_dir in possible_locations:
+            self.logger.info(f"🔍 Searching for parameter_tuning.json in {len(possible_locations)} locations...")
+            
+            for i, embeddings_dir in enumerate(possible_locations):
                 tuning_file = embeddings_dir / 'parameter_tuning.json'
+                self.logger.info(f"  Location {i+1}: {tuning_file} - exists: {tuning_file.exists()}")
                 
                 if tuning_file.exists():
+                    self.logger.info(f"📁 Loading parameter tuning from: {tuning_file}")
                     with open(tuning_file, 'r') as f:
                         tuning_results = json.load(f)
                     
-                    self.logger.info(f"Loaded pre-computed parameter tuning from {tuning_file}")
+                    self.logger.info(f"✅ Successfully loaded parameter tuning with {len(tuning_results)} keys")
                     return tuning_results
             
+            self.logger.warning("❌ parameter_tuning.json not found in any location")
             return None
             
         except Exception as e:
-            self.logger.warning(f"Failed to load pre-computed parameter tuning: {e}")
+            self.logger.error(f"❌ Exception loading pre-computed parameter tuning: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return None
     
     def _load_precomputed_dataset_centroids(self) -> Optional[Dict[str, np.ndarray]]:
@@ -1051,11 +1070,16 @@ class Level1BusinessClassifier:
                 Path(__file__).parent.parent.parent.parent / 'deployment' / 'assets' / 'embeddings',  # Relative to src
             ]
             
-            for embeddings_dir in possible_locations:
+            self.logger.info(f"🔍 Searching for business_categories.npy in {len(possible_locations)} locations...")
+            
+            for i, embeddings_dir in enumerate(possible_locations):
                 embeddings_file = embeddings_dir / 'business_categories.npy'
                 metadata_file = embeddings_dir / 'business_metadata.json'
                 
+                self.logger.info(f"  Location {i+1}: {embeddings_dir} - NPY: {embeddings_file.exists()}, JSON: {metadata_file.exists()}")
+                
                 if embeddings_file.exists() and metadata_file.exists():
+                    self.logger.info(f"📁 Loading business embeddings from: {embeddings_file}")
                     # Load embeddings and metadata
                     embeddings_array = np.load(embeddings_file)
                     
@@ -1066,7 +1090,7 @@ class Level1BusinessClassifier:
                     business_names = metadata.get('business_names', [])
                     
                     if len(business_names) != embeddings_array.shape[0]:
-                        self.logger.warning(f"Embedding count mismatch in {embeddings_file}")
+                        self.logger.warning(f"❌ Embedding count mismatch in {embeddings_file}: {len(business_names)} names vs {embeddings_array.shape[0]} embeddings")
                         continue
                     
                     # Create category centroids dictionary
@@ -1074,11 +1098,14 @@ class Level1BusinessClassifier:
                     for i, category_name in enumerate(business_names):
                         category_centroids[category_name] = embeddings_array[i]
                     
-                    self.logger.info(f"✅ Loaded pre-computed embeddings from {embeddings_file}")
+                    self.logger.info(f"✅ Successfully loaded {len(category_centroids)} business embeddings from {embeddings_file}")
                     return category_centroids
             
+            self.logger.warning("❌ business_categories.npy not found in any location")
             return None
             
         except Exception as e:
-            self.logger.warning(f"Failed to load pre-computed embeddings: {e}")
+            self.logger.error(f"❌ Exception loading pre-computed embeddings: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return None
